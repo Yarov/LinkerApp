@@ -1,0 +1,89 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Node {
+  id        String    @id @default(cuid())
+  name      String
+  type      String    // AP, STATION, ROUTER, DISTRIBUTION, CPE
+  ip        String?
+  mac       String?
+  model     String?
+  firmware  String?
+  latitude  Float?
+  longitude Float?
+  parentId  String?
+  parent    Node?     @relation("NodeHierarchy", fields: [parentId], references: [id])
+  children  Node[]    @relation("NodeHierarchy")
+  status    String    @default("OFFLINE") // ONLINE, OFFLINE, DEGRADED
+  lastSeen  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  clients Client[]
+  alerts  Alert[]
+}
+
+model Client {
+  id            String   @id @default(cuid())
+  name          String
+  phone         String?
+  address       String
+  status        String   @default("ACTIVE") // ACTIVE, SUSPENDED
+  pppoeUser     String   @unique
+  pppoePassword String
+  profileName   String   // matches MikroTik PPPoE profile name
+  nodeId        String?
+  node          Node?    @relation(fields: [nodeId], references: [id])
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  payments Payment[]
+}
+
+model Plan {
+  id           String   @id @default(cuid())
+  name         String
+  downloadMbps Int
+  uploadMbps   Int
+  price        Float
+  profileName  String   @unique // matches MikroTik PPPoE profile name like "plan-10M"
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+}
+
+model Payment {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  amount    Float
+  period    String   // e.g. "2026-03"
+  method    String   @default("EFECTIVO") // EFECTIVO, TRANSFERENCIA, OTRO
+  notes     String?
+  paidAt    DateTime @default(now())
+  createdAt DateTime @default(now())
+}
+
+model Alert {
+  id        String   @id @default(cuid())
+  nodeId    String?
+  node      Node?    @relation(fields: [nodeId], references: [id])
+  type      String   // LINK_DOWN, LOW_SIGNAL, HIGH_USAGE, PAYMENT_DUE
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model NetworkLog {
+  id        String   @id @default(cuid())
+  action    String   // "firewall", "qos", "dns", "clientIsolation", "antiDdos", "backup"
+  status    String   // "success", "error"
+  message   String   // "30 reglas de firewall aplicadas"
+  details   String?  // JSON string with specifics
+  createdAt DateTime @default(now())
+}

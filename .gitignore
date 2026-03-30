@@ -1,0 +1,30 @@
+# Dependencies
+app/node_modules/
+
+# Next.js
+app/.next/
+app/out/
+app/dist/
+
+# Tauri
+app/src-tauri/target/
+
+# Database
+*.db
+*.db-journal
+
+# Environment
+.env
+.env.local
+.env.production
+
+# WireGuard config (has private keys)
+wg-ameca.conf
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
