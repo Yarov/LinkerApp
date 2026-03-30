@@ -1,4 +1,3 @@
-#[cfg(not(debug_assertions))]
 use tauri::Manager;
 
 #[cfg(not(debug_assertions))]
@@ -37,49 +36,86 @@ pub fn run() {
                     .path()
                     .resource_dir()
                     .expect("failed to get resource dir");
-                let server_dir = resource_dir.join("server");
-                let server_js = server_dir.join("server.js");
-
-                if !server_js.exists() {
-                    eprintln!(
-                        "ERROR: server.js not found at {}",
-                        server_js.display()
-                    );
-                    return Ok(());
-                }
-
-                // Use the app's data directory for the writable SQLite database
                 let app_data_dir = app
                     .path()
                     .app_data_dir()
                     .expect("failed to get app data dir");
                 std::fs::create_dir_all(&app_data_dir).ok();
 
-                // Copy database from resources to app data dir if it doesn't exist yet
+                let server_dir = app_data_dir.join("server");
+                let server_js = server_dir.join("server.js");
+
+                // First launch: extract server.tar.gz
+                if !server_js.exists() {
+                    let tar_path = resource_dir.join("server.tar.gz");
+                    if tar_path.exists() {
+                        println!("First launch: extracting server from {:?}...", tar_path);
+
+                        let extract_cmd = if cfg!(target_os = "windows") {
+                            // Windows: use tar (available since Windows 10)
+                            format!(
+                                "tar -xzf \"{}\" -C \"{}\"",
+                                tar_path.display(),
+                                app_data_dir.display()
+                            )
+                        } else {
+                            format!(
+                                "tar -xzf '{}' -C '{}'",
+                                tar_path.display(),
+                                app_data_dir.display()
+                            )
+                        };
+
+                        let status = if cfg!(target_os = "windows") {
+                            Command::new("cmd")
+                                .args(["/C", &extract_cmd])
+                                .status()
+                        } else {
+                            Command::new("sh")
+                                .args(["-c", &extract_cmd])
+                                .status()
+                        };
+
+                        match status {
+                            Ok(s) if s.success() => {
+                                println!("Server extracted to {:?}", server_dir);
+                                // Make node binary executable on Unix
+                                #[cfg(not(target_os = "windows"))]
+                                {
+                                    let node_bin = server_dir.join("node");
+                                    if node_bin.exists() {
+                                        Command::new("chmod")
+                                            .args(["+x", &node_bin.to_string_lossy().to_string()])
+                                            .status()
+                                            .ok();
+                                    }
+                                }
+                            }
+                            Ok(s) => eprintln!("tar extraction failed with code: {}", s),
+                            Err(e) => eprintln!("Failed to run tar: {}", e),
+                        }
+                    } else {
+                        eprintln!("ERROR: server.tar.gz not found at {:?}", tar_path);
+                        return Ok(());
+                    }
+                }
+
+                if !server_js.exists() {
+                    eprintln!("ERROR: server.js not found after extraction at {:?}", server_js);
+                    return Ok(());
+                }
+
+                // Database setup
                 let db_resource = server_dir.join("dev.db");
                 let db_target = app_data_dir.join("linker.db");
                 if !db_target.exists() && db_resource.exists() {
                     std::fs::copy(&db_resource, &db_target).ok();
-                }
-
-                // Also copy prisma schema to app data dir for runtime
-                let prisma_dir = app_data_dir.join("prisma");
-                std::fs::create_dir_all(&prisma_dir).ok();
-                let schema_src = server_dir.join("prisma").join("schema.prisma");
-                let schema_dst = prisma_dir.join("schema.prisma");
-                if schema_src.exists() {
-                    std::fs::copy(&schema_src, &schema_dst).ok();
+                    println!("Initial database copied to {:?}", db_target);
                 }
 
                 let db_url = format!("file:{}", db_target.display());
 
-                println!(
-                    "Starting Next.js server from: {}",
-                    server_js.display()
-                );
-                println!("Database: {}", db_target.display());
-
-                // Use bundled node binary, fall back to system node
+                // Use bundled node or system node
                 let node_bin = if cfg!(target_os = "windows") {
                     server_dir.join("node.exe")
                 } else {
@@ -87,12 +123,14 @@ pub fn run() {
                 };
 
                 let node_cmd = if node_bin.exists() {
-                    println!("Using bundled Node.js: {}", node_bin.display());
+                    println!("Using bundled Node.js: {:?}", node_bin);
                     node_bin.to_string_lossy().to_string()
                 } else {
-                    println!("Bundled Node.js not found, falling back to system node");
+                    println!("Using system Node.js");
                     "node".to_string()
                 };
+
+                println!("Starting server: {} {:?}", node_cmd, server_js);
 
                 let child = Command::new(&node_cmd)
                     .arg(&server_js)
@@ -108,13 +146,12 @@ pub fn run() {
 
                 println!("Waiting for server on port 4983...");
                 if wait_for_port(4983, 30) {
-                    println!("Server is ready on port 4983");
+                    println!("Server ready!");
                 } else {
-                    eprintln!("WARNING: Server did not respond on port 4983 within 30 seconds");
+                    eprintln!("WARNING: Server did not start within 30 seconds");
                 }
             }
 
-            // Suppress unused variable warning in debug mode
             #[cfg(debug_assertions)]
             let _ = app;
 
@@ -126,7 +163,7 @@ pub fn run() {
                 if let Some(state) = window.try_state::<ServerProcess>() {
                     if let Ok(mut guard) = state.0.lock() {
                         if let Some(mut child) = guard.take() {
-                            println!("Shutting down Next.js server...");
+                            println!("Shutting down server...");
                             let _ = child.kill();
                             let _ = child.wait();
                         }

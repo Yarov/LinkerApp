@@ -142,7 +142,19 @@ if (!fs.existsSync(serverJs)) {
   process.exit(1);
 }
 
+// 8. Create server.tar.gz for Tauri bundling
+console.log('[8/8] Creating server.tar.gz...');
+const tarPath = path.join(rootDir, 'dist', 'server.tar.gz');
+try {
+  execSync(`tar -czf "${tarPath}" -C "${path.join(rootDir, 'dist')}" server`, { stdio: 'inherit' });
+  const tarSize = (fs.statSync(tarPath).size / 1048576).toFixed(1);
+  console.log(`  Created server.tar.gz (${tarSize} MB)`);
+} catch (e) {
+  console.error('ERROR: Failed to create tar.gz:', e.message);
+}
+
 console.log('');
 console.log('=== Production build complete! ===');
 console.log(`Output: ${distDir}`);
+console.log(`Archive: ${tarPath}`);
 console.log('Entry point: dist/server/server.js');
