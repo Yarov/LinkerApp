@@ -153,8 +153,13 @@ try {
   console.error('ERROR: Failed to create tar.gz:', e.message);
 }
 
+// 9. Copy tar.gz to src-tauri for bundling
+const tauriTar = path.join(rootDir, 'src-tauri', 'server.tar.gz');
+fs.copyFileSync(tarPath, tauriTar);
+console.log(`  Copied to src-tauri/server.tar.gz`);
+
 console.log('');
 console.log('=== Production build complete! ===');
 console.log(`Output: ${distDir}`);
-console.log(`Archive: ${tarPath}`);
+console.log(`Archive: ${tauriTar}`);
 console.log('Entry point: dist/server/server.js');

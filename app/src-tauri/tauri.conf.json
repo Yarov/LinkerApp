@@ -38,7 +38,7 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "../dist/server.tar.gz"
+      "server.tar.gz"
     ]
   }
 }
