@@ -11,19 +11,44 @@ function copyDir(src, dst) {
   for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
     const srcPath = path.join(src, entry.name);
     const dstPath = path.join(dst, entry.name);
+
+    // Handle symlinks: recreate the symlink instead of following it
+    if (entry.isSymbolicLink()) {
+      const linkTarget = fs.readlinkSync(srcPath);
+      try {
+        fs.symlinkSync(linkTarget, dstPath);
+      } catch (e) {
+        // If symlink creation fails, try to copy the target
+        const realPath = fs.realpathSync(srcPath);
+        const stat = fs.statSync(realPath);
+        if (stat.isDirectory()) {
+          copyDir(realPath, dstPath);
+        } else if (stat.isFile()) {
+          fs.copyFileSync(realPath, dstPath);
+        }
+      }
+      continue;
+    }
+
     if (entry.isDirectory()) {
       copyDir(srcPath, dstPath);
-    } else {
+    } else if (entry.isFile()) {
       fs.copyFileSync(srcPath, dstPath);
     }
+    // Skip sockets, FIFOs, and other special files
   }
 }
 
 console.log('=== Building Linker for production ===');
 
 // 1. Build Next.js in standalone mode
-console.log('[1/6] Building Next.js standalone...');
-execSync('npm run build', { stdio: 'inherit', cwd: rootDir });
+const skipBuild = process.argv.includes('--skip-build');
+if (skipBuild) {
+  console.log('[1/6] Skipping Next.js build (--skip-build flag)...');
+} else {
+  console.log('[1/6] Building Next.js standalone...');
+  execSync('npm run build', { stdio: 'inherit', cwd: rootDir });
+}
 
 // 2. Prepare clean output directory
 console.log('[2/6] Preparing output directory...');
@@ -95,8 +120,22 @@ if (fs.existsSync(prismaSchemaSrc)) {
   console.log('  - Copied prisma/schema.prisma');
 }
 
-// 6. Verify server.js exists
-console.log('[6/6] Verifying build...');
+// 6. Copy bundled Node.js binary
+console.log('[6/7] Copying Node.js binary...');
+const nodeBin = path.join(__dirname, '..', 'dist', 'node', process.platform === 'win32' ? 'node.exe' : 'node');
+if (fs.existsSync(nodeBin)) {
+  const destBin = path.join(distDir, process.platform === 'win32' ? 'node.exe' : 'node');
+  fs.copyFileSync(nodeBin, destBin);
+  if (process.platform !== 'win32') {
+    fs.chmodSync(destBin, 0o755);
+  }
+  console.log('  Node.js binary copied to dist/server/');
+} else {
+  console.warn('  WARNING: Node.js binary not found. Run "node scripts/download-node.js" first.');
+}
+
+// 7. Verify server.js exists
+console.log('[7/7] Verifying build...');
 const serverJs = path.join(distDir, 'server.js');
 if (!fs.existsSync(serverJs)) {
   console.error('ERROR: server.js not found in output. Build may have failed.');

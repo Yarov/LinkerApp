@@ -1,3 +1,4 @@
+#[cfg(not(debug_assertions))]
 use tauri::Manager;
 
 #[cfg(not(debug_assertions))]
@@ -78,7 +79,22 @@ pub fn run() {
                 );
                 println!("Database: {}", db_target.display());
 
-                let child = Command::new("node")
+                // Use bundled node binary, fall back to system node
+                let node_bin = if cfg!(target_os = "windows") {
+                    server_dir.join("node.exe")
+                } else {
+                    server_dir.join("node")
+                };
+
+                let node_cmd = if node_bin.exists() {
+                    println!("Using bundled Node.js: {}", node_bin.display());
+                    node_bin.to_string_lossy().to_string()
+                } else {
+                    println!("Bundled Node.js not found, falling back to system node");
+                    "node".to_string()
+                };
+
+                let child = Command::new(&node_cmd)
                     .arg(&server_js)
                     .current_dir(&server_dir)
                     .env("PORT", "4983")

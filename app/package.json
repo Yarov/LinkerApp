@@ -9,7 +9,10 @@
     "lint": "eslint",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "download-node": "node scripts/download-node.js",
+    "build:prod": "node scripts/build-prod.js",
+    "build:app": "npm run download-node && npm run build:prod && npx tauri build"
   },
   "dependencies": {
     "@prisma/adapter-better-sqlite3": "^7.6.0",
