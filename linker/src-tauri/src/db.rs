@@ -112,6 +112,7 @@ pub fn init_database(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
         ("admin_user", "admin"), ("admin_password", "linker2026"),
         ("mikrotik_host", "10.10.10.3"), ("mikrotik_port", "8728"),
         ("mikrotik_user", "admin"), ("mikrotik_password", ""),
+        ("isp_type", "other"), // "starlink", "izzi", "telmex", "other"
     ] {
         conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?1, ?2)", [k, v])?;
     }

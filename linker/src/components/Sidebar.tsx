@@ -14,6 +14,7 @@ import {
   Globe,
   PanelLeftClose,
   PanelLeftOpen,
+  Signal,
 } from "lucide-react";
 import { useMikrotikStore } from "@/stores/useMikrotikStore";
 import { useAuthStore } from "@/stores/useAuthStore";
@@ -40,6 +41,7 @@ const navSections: NavSection[] = [
     label: "RED",
     items: [
       { href: "/red", label: "Topologia & IPs", icon: Network },
+      { href: "/red/wans", label: "WANs & ISPs", icon: Signal },
       { href: "/seguridad", label: "Seguridad", icon: Shield },
     ],
   },
@@ -130,7 +132,9 @@ export default memo(function Sidebar() {
                 const isActive =
                   item.href === "/"
                     ? pathname === "/"
-                    : pathname.startsWith(item.href);
+                    : item.href === "/red"
+                      ? pathname === "/red" || (pathname.startsWith("/red/") && !pathname.startsWith("/red/wans"))
+                      : pathname.startsWith(item.href);
                 const Icon = item.icon;
                 return (
                   <Link

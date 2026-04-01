@@ -425,6 +425,146 @@ impl MikroTikConnection {
         }
     }
 
+    /// Ping with stats using interface name for proper WAN routing
+    pub fn ping_extended(&mut self, address: &str, count: u32, interface: &str) -> Result<Value, String> {
+        let mut args = vec![
+            format!("=address={}", address),
+            format!("=count={}", count),
+            "=interval=1".to_string(),
+        ];
+        if !interface.is_empty() {
+            args.push(format!("=interface={}", interface));
+        }
+        let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+
+        println!("[Ping] /ping args: {:?}", arg_refs);
+        let results = self.query("/ping", &arg_refs)?;
+        // RouterOS 7 returns one row per packet, each with cumulative sent/received
+        // and per-packet "time" field like "20ms955us"
+        // Use the last row for sent/received totals, collect each "time" for stats
+        let mut times: Vec<f64> = Vec::new();
+
+        for row in &results {
+            if let Some(time_str) = row.get("time").and_then(|v| v.as_str()) {
+                if let Some(ms) = Self::parse_time_ms(time_str) {
+                    times.push(ms);
+                }
+            }
+        }
+
+        // Last row has cumulative sent/received
+        let last = results.last();
+        let sent: u32 = last.and_then(|r| r.get("sent")).and_then(|v| v.as_str())
+            .and_then(|s| s.parse().ok()).unwrap_or(count);
+        let received: u32 = last.and_then(|r| r.get("received")).and_then(|v| v.as_str())
+            .and_then(|s| s.parse().ok()).unwrap_or(0);
+
+        let avg = if times.is_empty() { 0.0 } else { times.iter().sum::<f64>() / times.len() as f64 };
+        let min = times.iter().cloned().fold(f64::MAX, f64::min);
+        let max = times.iter().cloned().fold(0.0f64, f64::max);
+        let loss = if sent > 0 { ((sent - received) as f64 / sent as f64) * 100.0 } else { 100.0 };
+
+        Ok(serde_json::json!({
+            "avg_ms": (avg * 100.0).round() / 100.0,
+            "min_ms": if min == f64::MAX { 0.0 } else { (min * 100.0).round() / 100.0 },
+            "max_ms": (max * 100.0).round() / 100.0,
+            "sent": sent,
+            "received": received,
+            "loss_pct": (loss * 100.0).round() / 100.0,
+        }))
+    }
+
+    /// Parse RouterOS time string: "20ms955us", "23ms", "500us", "1s234ms"
+    fn parse_time_ms(s: &str) -> Option<f64> {
+        let s = s.trim();
+        let mut total_ms = 0.0f64;
+        let mut remaining = s;
+
+        // Extract seconds part: "1s..."
+        if let Some(idx) = remaining.find('s') {
+            // Make sure it's not "ms" or "us"
+            if idx > 0 && !remaining[..idx].ends_with('m') && !remaining[..idx].ends_with('u') {
+                if let Ok(secs) = remaining[..idx].parse::<f64>() {
+                    total_ms += secs * 1000.0;
+                }
+                remaining = &remaining[idx + 1..];
+            }
+        }
+
+        // Extract ms part: "20ms..."
+        if let Some(idx) = remaining.find("ms") {
+            if let Ok(ms) = remaining[..idx].parse::<f64>() {
+                total_ms += ms;
+            }
+            remaining = &remaining[idx + 2..];
+        }
+
+        // Extract us part: "955us"
+        if let Some(idx) = remaining.find("us") {
+            if let Ok(us) = remaining[..idx].parse::<f64>() {
+                total_ms += us / 1000.0;
+            }
+        }
+
+        // If nothing matched, try plain number
+        if total_ms == 0.0 {
+            if let Ok(v) = s.parse::<f64>() {
+                return Some(v);
+            }
+        }
+
+        if total_ms > 0.0 { Some(total_ms) } else { None }
+    }
+
+    /// Fetch URL for speed test — returns duration and bytes
+    pub fn fetch_speed_test(&mut self, url: &str, _interface: &str) -> Result<Value, String> {
+        // RouterOS 7 /tool/fetch with keep-result=no: download but don't save
+        // Note: src-interface is not a valid param in all versions, let routing handle it
+        let args = vec![
+            format!("=url={}", url),
+            "=keep-result=no".to_string(),
+        ];
+        let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+
+        println!("[Fetch] /tool/fetch args: {:?}", arg_refs);
+        let results = self.query("/tool/fetch", &arg_refs)?;
+        println!("[Fetch] Got {} rows", results.len());
+
+        // RouterOS returns progress rows; the last one with "finished" has final stats
+        // downloaded is in KiB, duration is like "4s" or "1s500ms"
+        let finished_row = results.iter().rev()
+            .find(|r| r.get("status").and_then(|v| v.as_str()) == Some("finished"));
+
+        if let Some(row) = finished_row {
+            let duration_str = row.get("duration").and_then(|v| v.as_str()).unwrap_or("0");
+            let downloaded_kib = row.get("downloaded").and_then(|v| v.as_str()).unwrap_or("0");
+            let total_kib = row.get("total").and_then(|v| v.as_str()).unwrap_or("0");
+
+            println!("[Fetch] Finished: downloaded={}KiB total={}KiB duration={}", downloaded_kib, total_kib, duration_str);
+
+            Ok(serde_json::json!({
+                "status": "finished",
+                "duration": duration_str,
+                "downloaded": downloaded_kib,
+                "total": total_kib,
+            }))
+        } else {
+            let last = results.last();
+            let status = last.and_then(|r| r.get("status")).and_then(|v| v.as_str()).unwrap_or("unknown");
+            Err(format!("Fetch did not finish, last status: {}", status))
+        }
+    }
+
+    /// Bandwidth test (requires btest server or another MikroTik)
+    pub fn bandwidth_test(&mut self, address: &str, protocol: &str, direction: &str, duration: &str) -> Result<Vec<Value>, String> {
+        self.query("/tool/bandwidth-test", &[
+            &format!("=address={}", address),
+            &format!("=protocol={}", protocol),
+            &format!("=direction={}", direction),
+            &format!("=duration={}", duration),
+        ])
+    }
+
     pub fn ssh_exec(&mut self, address: &str, user: &str, password: &str, command: &str) -> Result<(String, i32), String> {
         let results = self.query("/system/ssh-exec", &[
             &format!("=address={}", address),
@@ -451,6 +591,234 @@ impl MikroTikConnection {
 
     pub fn remove_firewall_filter(&mut self, id: &str) -> Result<(), String> {
         self.query("/ip/firewall/filter/remove", &[&format!("=.id={}", id)])?;
+        Ok(())
+    }
+
+    // -----------------------------------------------------------------------
+    // WISP Protection methods — mangle, NAT, raw, L7, DNS static, scripts
+    // -----------------------------------------------------------------------
+
+    /// Add mangle rule (for TTL manipulation, packet marking, MSS clamp)
+    pub fn add_mangle_rule(&mut self, args: &[&str]) -> Result<Value, String> {
+        self.query("/ip/firewall/mangle/add", args)
+            .map(|r| r.into_iter().next().unwrap_or(Value::Null))
+    }
+
+    /// Get all mangle rules
+    pub fn get_mangle_rules(&mut self) -> Result<Vec<Value>, String> {
+        self.query("/ip/firewall/mangle/print", &[])
+    }
+
+    /// Remove mangle rule by ID
+    pub fn remove_mangle_rule(&mut self, id: &str) -> Result<(), String> {
+        self.query("/ip/firewall/mangle/remove", &[&format!("=.id={}", id)])?;
+        Ok(())
+    }
+
+    /// Add NAT rule (for DNS redirect, port forwarding, hairpin)
+    pub fn add_nat_rule(&mut self, args: &[&str]) -> Result<Value, String> {
+        self.query("/ip/firewall/nat/add", args)
+            .map(|r| r.into_iter().next().unwrap_or(Value::Null))
+    }
+
+    /// Remove NAT rule by ID
+    pub fn remove_nat_rule(&mut self, id: &str) -> Result<(), String> {
+        self.query("/ip/firewall/nat/remove", &[&format!("=.id={}", id)])?;
+        Ok(())
+    }
+
+    /// Add raw firewall rule (for bogon filtering, pre-routing drops)
+    pub fn add_raw_rule(&mut self, args: &[&str]) -> Result<Value, String> {
+        self.query("/ip/firewall/raw/add", args)
+            .map(|r| r.into_iter().next().unwrap_or(Value::Null))
+    }
+
+    /// Get all raw rules
+    pub fn get_raw_rules(&mut self) -> Result<Vec<Value>, String> {
+        self.query("/ip/firewall/raw/print", &[])
+    }
+
+    /// Remove raw rule by ID
+    pub fn remove_raw_rule(&mut self, id: &str) -> Result<(), String> {
+        self.query("/ip/firewall/raw/remove", &[&format!("=.id={}", id)])?;
+        Ok(())
+    }
+
+    /// Add Layer-7 protocol definition (for torrent/P2P detection)
+    pub fn add_layer7_protocol(&mut self, args: &[&str]) -> Result<Value, String> {
+        self.query("/ip/firewall/layer7-protocol/add", args)
+            .map(|r| r.into_iter().next().unwrap_or(Value::Null))
+    }
+
+    /// Get all Layer-7 protocols
+    pub fn get_layer7_protocols(&mut self) -> Result<Vec<Value>, String> {
+        self.query("/ip/firewall/layer7-protocol/print", &[])
+    }
+
+    /// Remove Layer-7 protocol by ID
+    pub fn remove_layer7_protocol(&mut self, id: &str) -> Result<(), String> {
+        self.query("/ip/firewall/layer7-protocol/remove", &[&format!("=.id={}", id)])?;
+        Ok(())
+    }
+
+    /// Add DNS static entry (for domain blocking)
+    pub fn add_dns_static(&mut self, args: &[&str]) -> Result<Value, String> {
+        self.query("/ip/dns/static/add", args)
+            .map(|r| r.into_iter().next().unwrap_or(Value::Null))
+    }
+
+    /// Get all DNS static entries
+    pub fn get_dns_static(&mut self) -> Result<Vec<Value>, String> {
+        self.query("/ip/dns/static/print", &[])
+    }
+
+    /// Remove DNS static entry by ID
+    pub fn remove_dns_static(&mut self, id: &str) -> Result<(), String> {
+        self.query("/ip/dns/static/remove", &[&format!("=.id={}", id)])?;
+        Ok(())
+    }
+
+    /// Add address list entry (for DoH blocking, heavy users, blacklists)
+    pub fn add_address_list(&mut self, args: &[&str]) -> Result<Value, String> {
+        self.query("/ip/firewall/address-list/add", args)
+            .map(|r| r.into_iter().next().unwrap_or(Value::Null))
+    }
+
+    /// Get all address list entries
+    pub fn get_address_list(&mut self) -> Result<Vec<Value>, String> {
+        self.query("/ip/firewall/address-list/print", &[])
+    }
+
+    /// Remove address list entry by ID
+    pub fn remove_address_list(&mut self, id: &str) -> Result<(), String> {
+        self.query("/ip/firewall/address-list/remove", &[&format!("=.id={}", id)])?;
+        Ok(())
+    }
+
+    /// Add script (for anti-stow keepalive, automation)
+    pub fn add_script(&mut self, args: &[&str]) -> Result<Value, String> {
+        self.query("/system/script/add", args)
+            .map(|r| r.into_iter().next().unwrap_or(Value::Null))
+    }
+
+    /// Get all scripts
+    pub fn get_scripts(&mut self) -> Result<Vec<Value>, String> {
+        self.query("/system/script/print", &[])
+    }
+
+    /// Remove script by ID
+    pub fn remove_script(&mut self, id: &str) -> Result<(), String> {
+        self.query("/system/script/remove", &[&format!("=.id={}", id)])?;
+        Ok(())
+    }
+
+    /// Add scheduler (for periodic tasks like anti-stow)
+    pub fn add_scheduler(&mut self, args: &[&str]) -> Result<Value, String> {
+        self.query("/system/scheduler/add", args)
+            .map(|r| r.into_iter().next().unwrap_or(Value::Null))
+    }
+
+    /// Get all schedulers
+    pub fn get_schedulers(&mut self) -> Result<Vec<Value>, String> {
+        self.query("/system/scheduler/print", &[])
+    }
+
+    /// Remove scheduler by ID
+    pub fn remove_scheduler(&mut self, id: &str) -> Result<(), String> {
+        self.query("/system/scheduler/remove", &[&format!("=.id={}", id)])?;
+        Ok(())
+    }
+
+    /// Add netwatch entry (for monitoring connectivity)
+    pub fn add_netwatch(&mut self, args: &[&str]) -> Result<Value, String> {
+        self.query("/tool/netwatch/add", args)
+            .map(|r| r.into_iter().next().unwrap_or(Value::Null))
+    }
+
+    /// Get all netwatch entries
+    pub fn get_netwatch(&mut self) -> Result<Vec<Value>, String> {
+        self.query("/tool/netwatch/print", &[])
+    }
+
+    /// Remove netwatch entry by ID
+    pub fn remove_netwatch(&mut self, id: &str) -> Result<(), String> {
+        self.query("/tool/netwatch/remove", &[&format!("=.id={}", id)])?;
+        Ok(())
+    }
+
+    /// Set connection tracking parameters
+    pub fn set_connection_tracking(&mut self, args: &[&str]) -> Result<(), String> {
+        self.query("/ip/firewall/connection/tracking/set", args)?;
+        Ok(())
+    }
+
+    /// Set IP service parameters (restrict access)
+    pub fn set_ip_service(&mut self, service: &str, args: &[&str]) -> Result<(), String> {
+        // First find the service
+        let services = self.query("/ip/service/print", &[&format!("?name={}", service)])?;
+        if let Some(svc) = services.first() {
+            if let Some(id) = svc.get(".id").and_then(|v| v.as_str()) {
+                let mut full_args: Vec<String> = vec![format!("=.id={}", id)];
+                full_args.extend(args.iter().map(|a| a.to_string()));
+                let refs: Vec<&str> = full_args.iter().map(|s| s.as_str()).collect();
+                self.query("/ip/service/set", &refs)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Add queue tree (for gaming priority, traffic shaping)
+    pub fn add_queue_tree(&mut self, args: &[&str]) -> Result<Value, String> {
+        self.query("/queue/tree/add", args)
+            .map(|r| r.into_iter().next().unwrap_or(Value::Null))
+    }
+
+    /// Remove queue tree by ID
+    pub fn remove_queue_tree(&mut self, id: &str) -> Result<(), String> {
+        self.query("/queue/tree/remove", &[&format!("=.id={}", id)])?;
+        Ok(())
+    }
+
+    /// Add route
+    pub fn add_route(&mut self, args: &[&str]) -> Result<Value, String> {
+        self.query("/ip/route/add", args)
+            .map(|r| r.into_iter().next().unwrap_or(Value::Null))
+    }
+
+    /// Remove route by ID
+    pub fn remove_route(&mut self, id: &str) -> Result<(), String> {
+        self.query("/ip/route/remove", &[&format!("=.id={}", id)])?;
+        Ok(())
+    }
+
+    /// Remove netwatch entry by comment prefix
+    pub fn remove_netwatch_by_comment(&mut self, prefix: &str) -> Result<(), String> {
+        let entries = self.get_netwatch()?;
+        for e in &entries {
+            let comment = e.get("comment").and_then(|v| v.as_str()).unwrap_or("");
+            if comment.starts_with(prefix) {
+                if let Some(id) = e.get(".id").and_then(|v| v.as_str()) {
+                    self.remove_netwatch(id)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Add IPv6 mangle rule (for hop-limit manipulation)
+    pub fn add_ipv6_mangle_rule(&mut self, args: &[&str]) -> Result<Value, String> {
+        self.query("/ipv6/firewall/mangle/add", args)
+            .map(|r| r.into_iter().next().unwrap_or(Value::Null))
+    }
+
+    /// Get IPv6 mangle rules
+    pub fn get_ipv6_mangle_rules(&mut self) -> Result<Vec<Value>, String> {
+        self.query("/ipv6/firewall/mangle/print", &[])
+    }
+
+    /// Remove IPv6 mangle rule by ID
+    pub fn remove_ipv6_mangle_rule(&mut self, id: &str) -> Result<(), String> {
+        self.query("/ipv6/firewall/mangle/remove", &[&format!("=.id={}", id)])?;
         Ok(())
     }
 }

@@ -11,3 +11,4 @@ pub mod alerts;
 pub mod monitor;
 pub mod discover;
 pub mod setup;
+pub mod protection;

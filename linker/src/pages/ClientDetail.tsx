@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Pencil, Power, Phone, MapPin, Wifi, User, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Pencil, Power, Phone, MapPin, Wifi, User, AlertTriangle, Eye, EyeOff, Copy, Check } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import StatusBadge from "@/components/StatusBadge";
 import ClientForm from "@/components/ClientForm";
@@ -75,6 +75,15 @@ export default function ClienteDetailPage() {
   const [loading, setLoading] = useState(true); const [error, setError] = useState("");
   const [showEditForm, setShowEditForm] = useState(false);
   const [confirmToggle, setConfirmToggle] = useState(false); const [toggling, setToggling] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(label);
+      setTimeout(() => setCopied(null), 2000);
+    }).catch(() => {});
+  };
 
   const fetchClient = useCallback(() => {
     // No get_client command exists - use list_clients and find by id
@@ -152,11 +161,53 @@ export default function ClienteDetailPage() {
       <div className="rounded-2xl border border-[#e2e8f0] bg-white p-6 shadow-sm">
         <h2 className="mb-4 text-xs font-medium uppercase tracking-widest text-[#94a3b8]">Informacion del cliente</h2>
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {[{ icon: User, label: "Nombre", value: client.name }, { icon: Phone, label: "Telefono", value: client.phone || "Sin telefono" }, { icon: MapPin, label: "Direccion", value: client.address }, { icon: Wifi, label: "Usuario PPPoE", value: client.pppoeUser, mono: true }].map((item, i) => (
-            <div key={i} className="flex items-start gap-3"><div className="rounded-lg bg-[#eff6ff] p-2"><item.icon className="h-4 w-4 text-[#006fff]" /></div><div><p className="text-xs text-[#94a3b8]">{item.label}</p><p className={`text-sm font-medium text-[#0f172a] ${item.mono ? "font-mono" : ""}`}>{item.value}</p></div></div>
+          {[{ icon: User, label: "Nombre", value: client.name }, { icon: Phone, label: "Telefono", value: client.phone || "Sin telefono" }, { icon: MapPin, label: "Direccion", value: client.address }].map((item, i) => (
+            <div key={i} className="flex items-start gap-3"><div className="rounded-lg bg-[#eff6ff] p-2"><item.icon className="h-4 w-4 text-[#006fff]" /></div><div><p className="text-xs text-[#94a3b8]">{item.label}</p><p className="text-sm font-medium text-[#0f172a]">{item.value}</p></div></div>
           ))}
           <div className="flex items-start gap-3"><div className="rounded-lg bg-[#eff6ff] p-2"><Wifi className="h-4 w-4 text-[#006fff]" /></div><div><p className="text-xs text-[#94a3b8]">Plan</p><p className="text-sm font-medium text-[#0f172a]">{client.planName || client.profileName || "-"}{client.downloadMbps > 0 && <span className="text-[#475569]"> ({client.downloadMbps}/{client.uploadMbps} Mbps)</span>}</p>{client.price > 0 && <p className="text-xs text-[#006fff] font-medium">${client.price}/mes</p>}</div></div>
         </div>
+      </div>
+
+      {/* PPPoE Credentials */}
+      <div className="rounded-2xl border border-[#e2e8f0] bg-white p-6 shadow-sm">
+        <h2 className="mb-4 text-xs font-medium uppercase tracking-widest text-[#94a3b8]">Credenciales PPPoE</h2>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between rounded-xl bg-[#f5f7fa] px-4 py-3">
+            <div>
+              <p className="text-xs text-[#94a3b8]">Usuario</p>
+              <p className="font-mono text-sm font-medium text-[#0f172a]">{client.pppoeUser}</p>
+            </div>
+            <button
+              onClick={() => copyToClipboard(client.pppoeUser, "user")}
+              className="flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-[#475569] shadow-sm hover:bg-[#e2e8f0]"
+            >
+              {copied === "user" ? <><Check className="h-3.5 w-3.5 text-[#16a34a]" />Copiado</> : <><Copy className="h-3.5 w-3.5" />Copiar</>}
+            </button>
+          </div>
+          <div className="flex items-center justify-between rounded-xl bg-[#f5f7fa] px-4 py-3">
+            <div>
+              <p className="text-xs text-[#94a3b8]">Contrasena</p>
+              <p className="font-mono text-sm font-medium text-[#0f172a]">
+                {showPassword ? client.pppoePassword : "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowPassword(!showPassword)}
+                className="rounded-lg bg-white p-1.5 text-[#475569] shadow-sm hover:bg-[#e2e8f0]"
+              >
+                {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              </button>
+              <button
+                onClick={() => copyToClipboard(client.pppoePassword, "pass")}
+                className="flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-[#475569] shadow-sm hover:bg-[#e2e8f0]"
+              >
+                {copied === "pass" ? <><Check className="h-3.5 w-3.5 text-[#16a34a]" />Copiado</> : <><Copy className="h-3.5 w-3.5" />Copiar</>}
+              </button>
+            </div>
+          </div>
+        </div>
+        <p className="mt-3 text-[11px] text-[#94a3b8]">Estas credenciales se configuran en el modem/router del cliente en modo PPPoE.</p>
       </div>
 
       <div className="rounded-2xl border border-[#e2e8f0] bg-white shadow-sm">

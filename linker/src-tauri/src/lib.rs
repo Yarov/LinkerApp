@@ -75,6 +75,17 @@ pub fn run() {
             commands::setup::get_ip_map,
             commands::setup::add_antenna,
             commands::setup::full_wisp_setup,
+            // WAN Management
+            commands::network::detect_wan,
+            commands::network::get_wan_status,
+            commands::network::speed_test_wan,
+            commands::network::setup_load_balance,
+            commands::network::setup_failover,
+            commands::network::remove_wan_config,
+            // WISP Protection (universal + Starlink)
+            commands::protection::get_protection_status,
+            commands::protection::apply_protection,
+            commands::protection::remove_protection,
         ])
         .run(tauri::generate_context!())
         .expect("error while running linker");

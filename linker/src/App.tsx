@@ -12,6 +12,7 @@ import Payments from './pages/Payments';
 import Network from './pages/Network';
 import NodeDetail from './pages/NodeDetail';
 import Security from './pages/Security';
+import WanManager from './pages/WanManager';
 import Mikrotik from './pages/Mikrotik';
 import Alerts from './pages/Alerts';
 import VPN from './pages/VPN';
@@ -74,6 +75,7 @@ export default function App() {
                   <Route path="/red" element={<Network />} />
                   <Route path="/red/:id" element={<NodeDetail />} />
                   <Route path="/red/discover" element={<Navigate to="/red" replace />} />
+                  <Route path="/red/wans" element={<WanManager />} />
                   <Route path="/seguridad" element={<Security />} />
                   <Route path="/mikrotik" element={<Mikrotik />} />
                   <Route path="/alertas" element={<Alerts />} />

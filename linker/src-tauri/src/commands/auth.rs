@@ -111,6 +111,7 @@ pub async fn save_settings(
         let allowed_keys = [
             "mikrotik_host", "mikrotik_port", "mikrotik_user", "mikrotik_password",
             "admin_user", "admin_password",
+            "isp_type", "wan_lines",
         ];
 
         let mut saved = 0;
