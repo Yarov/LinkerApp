@@ -1,0 +1,115 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, monospace;
+}
+
+:root {
+  --bg-primary: #f5f7fa;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f8f9fb;
+  --border: #e2e8f0;
+  --border-accent: #cbd5e1;
+  --accent: #006fff;
+  --accent-hover: #0057cc;
+  --accent-light: #006fff08;
+  --success: #16a34a;
+  --warning: #f59e0b;
+  --danger: #dc2626;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  margin: 0;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+table tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.modal-backdrop {
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(8px);
+}
+
+@keyframes pulse-online {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.5); }
+  50% { opacity: 0.85; box-shadow: 0 0 0 4px rgba(22, 163, 74, 0); }
+}
+.status-dot-online {
+  animation: pulse-online 2s ease-in-out infinite;
+}
+
+@keyframes gradient-shift {
+  0%, 100% { background-position: 0% 0%; }
+  50% { background-position: 0% 100%; }
+}
+
+.recharts-cartesian-grid line { stroke: #e2e8f0; }
+.recharts-text { fill: #475569; }
+.recharts-tooltip-wrapper .recharts-default-tooltip {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08) !important;
+}
+.recharts-tooltip-item { color: #0f172a !important; }
+.recharts-legend-item-text { color: #475569 !important; }
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #e2e8f0 25%, #f5f7fa 50%, #e2e8f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite ease-in-out;
+}
+
+@keyframes vpn-dash {
+  0% { background-position: 0 0; }
+  100% { background-position: 16px 0; }
+}
+.animate-vpn-dash {
+  animation: vpn-dash 0.8s linear infinite;
+}
+
+:focus-visible {
+  outline: 2px solid #006fff;
+  outline-offset: 2px;
+}
+::selection {
+  background: #006fff40;
+  color: #0f172a;
+}
+input[type="month"],
+input[type="date"] {
+  color-scheme: light;
+}
