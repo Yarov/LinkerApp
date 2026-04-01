@@ -18,7 +18,7 @@ jobs:
           - platform: macos-latest
             target: aarch64-apple-darwin
             name: macOS-ARM
-          - platform: macos-latest
+          - platform: macos-13
             target: x86_64-apple-darwin
             name: macOS-Intel
           - platform: windows-latest
@@ -49,11 +49,9 @@ jobs:
         with:
           workspaces: linker/src-tauri
 
-      - name: Install dependencies (Ubuntu)
-        if: matrix.platform == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
+      - name: Install NASM (Windows)
+        if: matrix.platform == 'windows-latest'
+        uses: ilammy/setup-nasm@v1
 
       - name: Install Node dependencies
         working-directory: linker
