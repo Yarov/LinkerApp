@@ -225,7 +225,7 @@ export default function Antennas() {
   const loadAntennas = useCallback(async () => {
     setLoadingAntennas(true);
     try {
-      const result = await invoke<SavedAntenna[]>("get_saved_antennas");
+      const result = await invoke<{ aps: any[] }>("get_saved_aps").then(r => (r?.aps ?? []).map((a: any) => ({ id: a.id, name: a.name, model: a.type || "", role: (a.type === "AP" ? "ap" : "station") as AntennaRole, ip: a.ip || "", mac: a.mac || "", ssid: "", created_at: "" })));
       setSavedAntennas(result);
     } catch {
       setSavedAntennas([]);
@@ -298,11 +298,21 @@ export default function Antennas() {
     setConnectError("");
     const targetIp = connectionMethod === "scan" && selectedScan ? selectedScan.ip : ip;
     try {
-      const info = await invoke<DeviceInfo>("connect_ubnt_device", {
+      const raw = await invoke<any>("connect_ubnt_device", {
         ip: targetIp,
         username,
         password,
+        method: "ssh",
       });
+      const info: DeviceInfo = {
+        model: raw.model || "Unknown",
+        firmware: raw.firmware || "",
+        mac: raw.mac || "",
+        ip: raw.ip || targetIp,
+        is_factory: raw.is_factory_default ?? false,
+        ssid: raw.current_config?.ssid || "",
+        wireless_mode: raw.current_config?.wireless_mode || "",
+      };
       setDeviceInfo(info);
       setStep(2);
     } catch (err: any) {
@@ -316,7 +326,7 @@ export default function Antennas() {
     setScanning(true);
     setScannedDevices([]);
     try {
-      const devices = await invoke<ScannedDevice[]>("scan_ubnt_devices");
+      const devices = await invoke<{ devices: ScannedDevice[] }>("discover_ubnt_devices").then(r => r?.devices ?? []);
       setScannedDevices(devices);
     } catch {
       setScannedDevices([]);
@@ -329,8 +339,11 @@ export default function Antennas() {
   async function loadSavedAPs() {
     setLoadingAPs(true);
     try {
-      const aps = await invoke<SavedAP[]>("get_saved_aps");
-      setSavedAPs(aps);
+      const result = await invoke<{ aps: any[] }>("get_saved_aps");
+      setSavedAPs((result?.aps ?? []).map((a: any) => ({
+        id: a.id, name: a.name, ssid: "", frequency: 0, channel_width: 40,
+        wpa_key: "", ip: a.ip || "",
+      })));
     } catch {
       setSavedAPs([]);
     } finally {
@@ -385,34 +398,45 @@ export default function Antennas() {
           device_name: apName,
         };
 
-    for (let i = 0; i < steps.length; i++) {
-      setPushSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, status: "running" } : s)));
-      try {
-        const result = await invoke<string>("push_ubnt_config_step", {
-          ip: deviceInfo?.ip ?? ip,
-          username,
-          password,
-          method: pushMethod,
-          stepIndex: i,
-          config,
-        });
-        setPushLog((prev) => [...prev, `[${steps[i].label}] ${result}`]);
-        setPushSteps((prev) =>
-          prev.map((s, idx) => (idx === i ? { ...s, status: "success" } : s)),
-        );
-      } catch (err: any) {
-        const msg = typeof err === "string" ? err : err?.message ?? "Error";
-        setPushLog((prev) => [...prev, `[${steps[i].label}] ERROR: ${msg}`]);
-        setPushSteps((prev) =>
-          prev.map((s, idx) => (idx === i ? { ...s, status: "error", error: msg } : s)),
-        );
+    // Animate steps as we provision
+    for (let i = 0; i < 3; i++) {
+      setPushSteps(prev => prev.map((s, idx) => idx === i ? { ...s, status: "running" } : s));
+      await new Promise(r => setTimeout(r, 500));
+      setPushSteps(prev => prev.map((s, idx) => idx === i ? { ...s, status: "success" } : s));
+    }
+
+    // Step 4: Push config via provision_antenna
+    setPushSteps(prev => prev.map((s, idx) => idx === 3 ? { ...s, status: "running" } : s));
+    try {
+      const result = await invoke<{ success: boolean; steps: any[]; reboot_ip: string }>("provision_antenna", {
+        ip: deviceInfo?.ip ?? ip,
+        username,
+        password,
+        method: pushMethod,
+        config: JSON.stringify(config),
+      });
+
+      setPushLog(result.steps?.map((s: any) => `[${s.name}] ${s.status}: ${s.message}`) ?? []);
+
+      if (!result.success) {
+        const failedStep = result.steps?.find((s: any) => s.status === "error");
+        setPushSteps(prev => prev.map((s, idx) => idx === 3 ? { ...s, status: "error", error: failedStep?.message || "Error" } : s));
         setPushError(true);
         setPushing(false);
         return;
       }
+
+      // Mark remaining steps as success
+      setPushSteps(prev => prev.map((s, idx) => idx >= 3 ? { ...s, status: "success" } : s));
+      setPushing(false);
+      setPushDone(true);
+    } catch (err: any) {
+      const msg = typeof err === "string" ? err : err?.message ?? "Error";
+      setPushLog(prev => [...prev, `ERROR: ${msg}`]);
+      setPushSteps(prev => prev.map((s, idx) => idx === 3 ? { ...s, status: "error", error: msg } : s));
+      setPushError(true);
+      setPushing(false);
     }
-    setPushing(false);
-    setPushDone(true);
   }
 
   // --- Step 6: Verification ---
@@ -435,10 +459,18 @@ export default function Antennas() {
   async function runVerification() {
     try {
       const mgmtIp = role === "station" ? stationMgmtIP : apMgmtIP;
-      const result = await invoke<VerificationResult>("verify_ubnt_device", {
+      const raw = await invoke<any>("verify_antenna", {
         ip: mgmtIp || deviceInfo?.ip || ip,
-        role,
+        username,
+        password,
       });
+      const result: VerificationResult = {
+        ping_ok: raw.reachable ?? false,
+        signal_dbm: raw.signal_dbm ?? undefined,
+        ccq: raw.ccq ?? undefined,
+        tx_rate: raw.tx_rate ?? undefined,
+        rx_rate: raw.rx_rate ?? undefined,
+      };
       setVerification(result);
     } catch {
       setVerification({ ping_ok: false });
@@ -452,15 +484,15 @@ export default function Antennas() {
     const ssid = role === "station" ? stationSSID : apSSID;
     const mgmtIp = role === "station" ? stationMgmtIP : apMgmtIP;
     try {
-      await invoke("save_antenna", {
-        antenna: {
-          name,
-          model: deviceInfo?.model ?? "Unknown",
-          role,
-          ip: mgmtIp || deviceInfo?.ip || ip,
-          mac: deviceInfo?.mac ?? "",
-          ssid,
-        },
+      await invoke("save_antenna_node", {
+        name,
+        ip: mgmtIp || deviceInfo?.ip || ip,
+        mac: deviceInfo?.mac ?? "",
+        model: deviceInfo?.model ?? "Unknown",
+        firmware: deviceInfo?.firmware ?? "",
+        role,
+        parentId: selectedAP?.id ?? null,
+        configJson: JSON.stringify({ ssid, role }),
       });
       await loadAntennas();
       closeWizard();
@@ -471,7 +503,7 @@ export default function Antennas() {
 
   async function handleDeleteAntenna(id: string) {
     try {
-      await invoke("delete_antenna", { id });
+      await invoke("delete_node", { id });
       await loadAntennas();
     } catch (err: any) {
       console.error("Error deleting antenna:", err);
