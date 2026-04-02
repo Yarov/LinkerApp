@@ -214,6 +214,7 @@ export default function RedPage() {
   const nodesError = useAppStore(s => s.nodesError);
   const storeFetchNodes = useAppStore(s => s.fetchNodes);
   const invalidateNodes = useAppStore(s => s.invalidateNodes);
+  const invalidateDashboard = useAppStore(s => s.invalidateDashboard);
   const loading = nodesLoading && !nodesLoaded;
   const error = nodesError;
 
@@ -372,14 +373,14 @@ export default function RedPage() {
           parentId: nodeForm.parentId || null,
         });
       }
-      setShowAddForm(false); setEditingNode(null); setNodeForm(emptyNodeForm); fetchNodes();
+      setShowAddForm(false); setEditingNode(null); setNodeForm(emptyNodeForm); invalidateDashboard(); fetchNodes();
       setTimeout(() => setToast(null), 6000);
     } catch (err: unknown) { setFormError(err instanceof Error ? err.message : String(err)); } finally { setSaving(false); }
   };
 
   const handleDeleteNode = async () => {
     if (!deletingNode) return; setDeleting(true);
-    try { await invoke("delete_node", { id: deletingNode.id }); setDeletingNode(null); fetchNodes(); } catch (err) { alert(err instanceof Error ? err.message : String(err)); } finally { setDeleting(false); }
+    try { await invoke("delete_node", { id: deletingNode.id }); setDeletingNode(null); invalidateDashboard(); fetchNodes(); } catch (err) { alert(err instanceof Error ? err.message : String(err)); } finally { setDeleting(false); }
   };
 
   function openAssignModal(ip?: string, mac?: string) {

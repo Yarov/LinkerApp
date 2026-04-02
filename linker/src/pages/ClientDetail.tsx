@@ -7,6 +7,7 @@ import ClientForm from "@/components/ClientForm";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import Skeleton from "@/components/Skeleton";
 import { useMikrotikStore } from "@/stores/useMikrotikStore";
+import { useAppStore } from "@/stores/useAppStore";
 
 // Rust list_clients returns { clients: [...] } with snake_case fields
 interface RawClient {
@@ -70,6 +71,8 @@ export default function ClienteDetailPage() {
   const navigate = useNavigate();
   const { id: clientId } = useParams<{ id: string }>();
   const mikrotikConnected = useMikrotikStore(s => s.connected);
+  const invalidateDashboard = useAppStore(s => s.invalidateDashboard);
+  const invalidateClients = useAppStore(s => s.invalidateClients);
   const [client, setClient] = useState<ClientDetailData | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true); const [error, setError] = useState("");
@@ -138,7 +141,7 @@ export default function ClienteDetailPage() {
 
   const handleToggle = async () => {
     setToggling(true); setConfirmToggle(false);
-    try { await invoke("toggle_client", { id: clientId }); fetchClient(); } catch { alert("Error al cambiar el estado del cliente"); } finally { setToggling(false); }
+    try { await invoke("toggle_client", { id: clientId }); invalidateClients(); invalidateDashboard(); fetchClient(); } catch { alert("Error al cambiar el estado del cliente"); } finally { setToggling(false); }
   };
 
   if (loading) return (<div className="space-y-6"><div className="flex items-center justify-between"><div className="flex items-center gap-4"><Skeleton className="h-10 w-10 rounded-xl" /><div><Skeleton className="h-7 w-40" /><div className="mt-2 flex items-center gap-2"><Skeleton className="h-5 w-16 rounded-lg" /><Skeleton className="h-4 w-24" /></div></div></div></div></div>);
@@ -226,7 +229,7 @@ export default function ClienteDetailPage() {
           </tbody>
         </table>
       </div>
-      <ClientForm open={showEditForm} onClose={() => setShowEditForm(false)} onSuccess={() => { setShowEditForm(false); fetchClient(); }} client={client} />
+      <ClientForm open={showEditForm} onClose={() => setShowEditForm(false)} onSuccess={() => { setShowEditForm(false); invalidateClients(); invalidateDashboard(); fetchClient(); }} client={client} />
       <ConfirmDialog open={confirmToggle} onClose={() => setConfirmToggle(false)} onConfirm={handleToggle} title={isActive ? "Suspender servicio" : "Reactivar servicio"} message={isActive ? `Estas seguro de suspender el servicio de ${client.name}? El cliente perdera internet inmediatamente.` : `Reactivar el servicio de ${client.name}?`} confirmText={isActive ? "Suspender" : "Reactivar"} confirmColor={isActive ? "red" : "blue"} loading={toggling} />
     </div>
   );

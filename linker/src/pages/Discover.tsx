@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Search, Plus, Wifi, AlertTriangle, CheckCircle, Monitor } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import Skeleton from "@/components/Skeleton";
+import { useAppStore } from "@/stores/useAppStore";
 
 // Rust discover_devices returns: { subnet, found, devices: [{ ip, responsive }] }
 interface DiscoveredDevice { ip: string; responsive: boolean; }
@@ -10,6 +11,7 @@ interface DiscoverResult { subnet: string; found: number; devices: DiscoveredDev
 
 export default function DiscoverPage() {
   const navigate = useNavigate();
+  const invalidateDashboard = useAppStore(s => s.invalidateDashboard);
   const [result, setResult] = useState<DiscoverResult | null>(null);
   const [loading, setLoading] = useState(false); const [error, setError] = useState("");
   const [subnet, setSubnet] = useState("10.10.10");
@@ -39,6 +41,7 @@ export default function DiscoverPage() {
         parentId: null,
       });
       setAddedIps(prev => new Set(prev).add(device.ip));
+      invalidateDashboard();
     } catch (err) { alert(String(err)); } finally { setAdding(null); }
   };
 

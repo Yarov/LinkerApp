@@ -19,6 +19,7 @@ export default function ClientesPage() {
   const clientsError = useAppStore(s => s.clientsError);
   const fetchClients = useAppStore(s => s.fetchClients);
   const invalidateClients = useAppStore(s => s.invalidateClients);
+  const invalidateDashboard = useAppStore(s => s.invalidateDashboard);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -41,6 +42,7 @@ export default function ClientesPage() {
     try {
       await invoke("toggle_client", { id: clientId });
       invalidateClients();
+      invalidateDashboard();
       fetchClients();
     } catch {
       alert("Error al cambiar el estado del cliente");
@@ -95,7 +97,7 @@ export default function ClientesPage() {
           </tbody>
         </table>
       </div>
-      <ClientForm open={showForm} onClose={() => { setShowForm(false); setEditingClient(null); }} onSuccess={() => { setShowForm(false); setEditingClient(null); invalidateClients(); fetchClients(); }} client={editingClient} />
+      <ClientForm open={showForm} onClose={() => { setShowForm(false); setEditingClient(null); }} onSuccess={() => { setShowForm(false); setEditingClient(null); invalidateClients(); invalidateDashboard(); fetchClients(); }} client={editingClient} />
       <ConfirmDialog open={!!confirmToggle} onClose={() => setConfirmToggle(null)} onConfirm={() => { if (confirmToggle) handleToggle(confirmToggle.id); }} title={confirmToggle ? ((confirmToggle.status ?? "").toUpperCase() === "ACTIVE" ? "Suspender servicio" : "Reactivar servicio") : ""} message={confirmToggle ? ((confirmToggle.status ?? "").toUpperCase() === "ACTIVE" ? `Estas seguro de suspender el servicio de ${confirmToggle.name}? El cliente perdera internet inmediatamente.` : `Reactivar el servicio de ${confirmToggle.name}?`) : ""} confirmText={confirmToggle ? ((confirmToggle.status ?? "").toUpperCase() === "ACTIVE" ? "Suspender" : "Reactivar") : "Confirmar"} confirmColor={confirmToggle && (confirmToggle.status ?? "").toUpperCase() === "ACTIVE" ? "red" : "blue"} loading={!!toggling} />
     </div>
   );

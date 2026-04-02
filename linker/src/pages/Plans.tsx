@@ -18,6 +18,7 @@ export default function PlanesPage() {
   const plansError = useAppStore(s => s.plansError);
   const fetchPlans = useAppStore(s => s.fetchPlans);
   const invalidatePlans = useAppStore(s => s.invalidatePlans);
+  const invalidateDashboard = useAppStore(s => s.invalidateDashboard);
 
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -62,12 +63,13 @@ export default function PlanesPage() {
       }
       setShowForm(false);
       invalidatePlans();
+      invalidateDashboard();
       fetchPlans();
     } catch (err: unknown) { setFormError(err instanceof Error ? err.message : String(err)); } finally { setSaving(false); }
   };
   const handleDelete = async (planId: string) => {
     if (!confirm("Estas seguro de eliminar este plan?")) return;
-    try { await invoke("delete_plan", { id: planId }); invalidatePlans(); fetchPlans(); } catch (err) { alert(err instanceof Error ? err.message : String(err)); }
+    try { await invoke("delete_plan", { id: planId }); invalidatePlans(); invalidateDashboard(); fetchPlans(); } catch (err) { alert(err instanceof Error ? err.message : String(err)); }
   };
   const inputClass = "w-full rounded-xl border border-[#e2e8f0] bg-white px-3.5 py-2.5 text-sm text-[#0f172a] placeholder-[#94a3b8] transition-colors focus:border-[#006fff] focus:outline-none focus:ring-1 focus:ring-[#006fff]/30";
 
