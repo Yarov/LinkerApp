@@ -88,7 +88,7 @@ export default function PagosPage() {
           ))}</tbody>
         </table>
       </div>
-      <PaymentForm open={showForm} onClose={() => setShowForm(false)} onSuccess={() => { setShowForm(false); invalidatePayments(); invalidateDashboard(); fetchPayments(monthFilter); }} />
+      <PaymentForm open={showForm} onClose={() => { setShowForm(false); invalidatePayments(); invalidateDashboard(); fetchPayments(monthFilter); }} onSuccess={() => { invalidatePayments(); invalidateDashboard(); fetchPayments(monthFilter); }} />
       <ConfirmDialog open={!!deletingPayment} onClose={() => setDeletingPayment(null)} onConfirm={handleDeletePayment} title="Eliminar pago" message={deletingPayment ? `Estas seguro de eliminar el pago de $${(deletingPayment.amount ?? 0).toLocaleString("es-MX")} de ${deletingPayment.clientName ?? "este cliente"}?` : ""} confirmText="Eliminar" confirmColor="red" loading={deleting} />
     </div>
   );
