@@ -15,6 +15,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Signal,
+  Radio,
 } from "lucide-react";
 import { useMikrotikStore } from "@/stores/useMikrotikStore";
 import { useAuthStore } from "@/stores/useAuthStore";
@@ -42,6 +43,7 @@ const navSections: NavSection[] = [
     items: [
       { href: "/red", label: "Topologia & IPs", icon: Network },
       { href: "/red/wans", label: "WANs & ISPs", icon: Signal },
+      { href: "/antenas", label: "Antenas", icon: Radio },
       { href: "/seguridad", label: "Seguridad", icon: Shield },
     ],
   },

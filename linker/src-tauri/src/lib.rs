@@ -1,5 +1,6 @@
 mod db;
 mod mikrotik;
+mod ubiquiti;
 mod commands;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -86,6 +87,14 @@ pub fn run() {
             commands::protection::get_protection_status,
             commands::protection::apply_protection,
             commands::protection::remove_protection,
+            // Antenna provisioning wizard
+            commands::antennas::discover_ubnt_devices,
+            commands::antennas::connect_ubnt_device,
+            commands::antennas::read_ap_config,
+            commands::antennas::provision_antenna,
+            commands::antennas::verify_antenna,
+            commands::antennas::get_saved_aps,
+            commands::antennas::save_antenna_node,
         ])
         .run(tauri::generate_context!())
         .expect("error while running linker");

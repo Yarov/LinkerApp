@@ -18,6 +18,7 @@ import Alerts from './pages/Alerts';
 import VPN from './pages/VPN';
 import VPNSetup from './pages/VPNSetup';
 import Settings from './pages/Settings';
+import Antennas from './pages/Antennas';
 import Onboarding from './pages/Onboarding';
 import Setup from './pages/Setup';
 
@@ -77,6 +78,7 @@ export default function App() {
                   <Route path="/red/discover" element={<Navigate to="/red" replace />} />
                   <Route path="/red/wans" element={<WanManager />} />
                   <Route path="/seguridad" element={<Security />} />
+                  <Route path="/antenas" element={<Antennas />} />
                   <Route path="/mikrotik" element={<Mikrotik />} />
                   <Route path="/alertas" element={<Alerts />} />
                   <Route path="/vpn" element={<VPN />} />
